@@ -8,7 +8,7 @@ knitr::opts_chunk$set(warning=FALSE, message=FALSE)
 
 ##Executive summary
 
-This report describes training of the machine learning model to be used in predicting a human activity. The data we use in this project to train, test and validate the model come from this source: http://groupware.les.inf.puc-rio.br/har. We used four different machine learning algorithms including (1) classification tree method `rpat`, (2) bootstrap aggregating method `treebag`, (3) random forest method `rf`, and (4) boosting classification method `gbm`. Random forest algorithm `rf` has demonstrated a better performance than others and is our choice for predicting a human activity.
+This report describes the training of the machine learning model to be used in predicting a human activity. The data we use in this project to train, test and validate the model come from this source: http://groupware.les.inf.puc-rio.br/har. We used four different machine learning algorithms including (1) classification tree method `rpat`, (2) bootstrap aggregating method `treebag`, (3) random forest method `rf`, and (4) boosting classification method `gbm`. Random forest algorithm `rf` has demonstrated a better performance than others and is our choice for predicting a human activity.
 
 ##Data
 
