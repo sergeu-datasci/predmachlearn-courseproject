@@ -1,0 +1,159 @@
+---
+title: "Practical ML Course Project"
+author: "Sergei Uglitskikh"
+date: "September 21, 2015"
+output: html_document
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+```
+
+##Executive summary
+
+This report describes training of the machine learning model to be used in predicting a human activity. The data we use in this project to train, test and validate the model come from this source: http://groupware.les.inf.puc-rio.br/har. We used four different machine learning algorithms including (1) classification tree method `rpat`, (2) bootstrap aggregating method `treebag`, (3) random forest method `rf`, and (4) boosting classification method `gbm`. Random forest algorithm `rf` has demonstrated a better performance than others and is our choice for predicting a human activity.
+
+##Data
+
+Load training data. 
+```{r cache=TRUE}
+ar <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+               # Do not create factor variables...
+               stringsAsFactors = FALSE,
+               # ... except of one, the model output
+               colClasses = c("classe" = "factor"),
+               # Substitute meaningless values with NA
+               na.strings = c("#DIV/0!", "NA", ""))
+```
+
+Create training set as 60% of the sample data, and testing and validation sets 20% of the sample data each.
+```{r}
+library(caret)
+set.seed(1234)
+# Create training set 60% of the sample data 
+inTrain <- createDataPartition(y = ar$classe, p = 0.6, list = FALSE)
+train <- ar[inTrain,]
+# Create test and validation sets 20% of the sample data each
+inTest <- createDataPartition(y = ar[-inTrain,]$classe, p = 0.5, list = FALSE)
+test <- ar[-inTrain,][inTest,]
+validation <- ar[-inTrain,][-inTest,]
+```
+
+##Features extraction and selection
+
+According to the paper http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf, the data set consists of:
+
+1. Raw data recorded from accelerometer, gyroscope and magnetometer sensors located on the belt, arm, forearm, and dumbbell.
+
+2. Calculated acceleration vectors including Euler angles (roll, pitch and yaw) and the acceleration total.
+
+3. A number of statistics calculated for the features mentioned above on sliding windows, including mean, variance, standard deviation, max, min, amplitude, kurtosis, and skewness.
+
+Most of the data samples do not contain values at the statistic variables, thus we exclude them from the prediction model. Note that including such variables could improve performance of the predictive model because time window statistics contain useful information which may help distinguish different activities. Since we have no sufficient information on how to impute the missing values in a consistent manner, we drop these features out. Also we omit first 7 columns which relate to the person identification, time stamp, and time window. This information is beyond of our prediction model. Apply these steps to the training set with the `preprocess` function.
+```{r}
+preprocess <- function (dataset) {
+    # Exclude statistic variables
+    regex <- "^avg_|var_|stddev_|max_|min_|amplitude_|kurtosis_|skewness_"
+    dataset <- dataset[, -grep(regex, colnames(dataset))]
+    # Exclude person identification, timestamp, and time window columns
+    dataset <- dataset[, -(1:7)]
+    }
+# Apply preprocess steps to the training set
+trainPre <- preprocess(train)
+```
+
+##Modelling
+
+We train several classification models with multiclass outcome and compare their performance:
+
+* Classification tree model `rpart`
+* Bootstrap aggregating model `treebag`
+* Random forests model `rf`
+* Boosting classification model `gbm`
+
+```{r cache=TRUE}
+# Classification tree method 'rpart'
+rpartModel <- train(classe ~ ., data = trainPre, method = "rpart")
+# Bootstrap aggregating method 'treebag'
+treebagModel <- train(classe ~ ., data = trainPre, method = "treebag")
+# Random forests method 'rf'
+rfModel <- train(classe ~ ., data = trainPre, method = "rf", prox = TRUE)
+# Boosting classification method 'gbm'
+gbmModel <- train(classe ~ ., data = trainPre, method = "gbm", verbose = FALSE)
+```
+
+##Model comparison
+
+To select the best model we will test them on the *test* data set.
+
+For each model, calculate a confusion matrix using the *test* data set.
+```{r cache=TRUE}
+# Calculate confusion matrix for each model
+rpartCM <- confusionMatrix(predict(rpartModel, test), test$classe)
+treebagCM <- confusionMatrix(predict(treebagModel, test), test$classe)
+rfCM <- confusionMatrix(predict(rfModel, test), test$classe)
+gbmCM <- confusionMatrix(predict(gbmModel, test), test$classe)
+```
+
+Compare the models by accuracy and kappa metrics.
+
+```{r echo=FALSE}
+# Create compare data frame
+cmp <- data.frame(model = c("rpart", "treebag", "rf", "gbm"),
+                  accuracy = c(round(as.numeric(rpartCM$overall['Accuracy']), 4),
+                               round(as.numeric(treebagCM$overall['Accuracy']), 4),
+                               round(as.numeric(rfCM$overall['Accuracy']), 4),
+                               round(as.numeric(gbmCM$overall['Accuracy']), 4)),
+                  kappa = c(round(as.numeric(rpartCM$overall['Kappa']), 4),
+                            round(as.numeric(treebagCM$overall['Kappa']), 4),
+                            round(as.numeric(rfCM$overall['Kappa']), 4),
+                            round(as.numeric(gbmCM$overall['Kappa']), 4)))
+# Sort the compare data by 'accuracy' in descending order
+cmp <- cmp[order(-cmp[,"accuracy"]),]
+```
+
+Model               | Accuracy               | Kappa
+--------------------|------------------------|-----------------
+**`r cmp[1, "model"]`** | **`r cmp[1, "accuracy"]`** | **`r cmp[1, "kappa"]`**
+`r cmp[2, "model"]` | `r cmp[2, "accuracy"]` | `r cmp[2, "kappa"]`
+`r cmp[3, "model"]` | `r cmp[3, "accuracy"]` | `r cmp[3, "kappa"]`
+`r cmp[4, "model"]` | `r cmp[4, "accuracy"]` | `r cmp[4, "kappa"]`
+
+Random forest model `rf` demonstrates the best performance in both accuracy and kappa. Bootstrap aggregating model `treebag` also shows a very good performance, but it is slightly less accurate.
+
+##Final model
+
+Based on the testing results we choose the random forest model `rf` for predicting a human activity. For validating the model performance we use the *validation* data set. Perfrormance of the coosen model:
+
+```{r}
+confusionMatrix(predict(rfModel, validation), validation$classe)
+```
+
+---
+
+##Appendix. Submission assignment
+
+Load test data.
+```{r eval=FALSE}
+arTest <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                   # Do not create factor variables
+                   stringsAsFactors = FALSE)
+```
+
+Apply the following R code to prepare submission files.
+```{r eval=FALSE}
+# Predict answers
+answers = predict(rfModel, arTest)
+
+# Function to write submission files
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        filepath = file.path("submission", filename)
+        write.table(x[i],file=filepath,quote=FALSE,row.names=FALSE,col.names=FALSE)
+        }
+    }
+
+# Write submission files
+pml_write_files(answers)
+```
